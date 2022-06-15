@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 import pickle
 import numpy as np
 from tqdm import tqdm
@@ -5,16 +6,23 @@ from datasets import load_dataset
 import scipy.sparse.linalg as sln
 
 
-
 dataset_dict = load_dataset("wikipedia", "20220301.simple")
 dataset = dataset_dict['train']
 DOCUMENT_COUNT = 2000
+
+
+@dataclass
+class Article:
+    title: str
+    url: str
+    close: float
+
 
 def similarity_metric_1(q, matrix, i):
     return (matrix.getrow(i).dot(q[0]) / sln.norm(matrix.getrow(i)))[0]
 
 
-def search(query, metric , k=10):
+def search(query, metric=similarity_metric_1, k=10):
     with open("tokenizer_2K", "rb") as d:
         tokenizer = pickle.load(d)
 
@@ -24,15 +32,18 @@ def search(query, metric , k=10):
     cos = []
     q = tokenizer.texts_to_matrix([query], mode="binary")
     q_norm = np.linalg.norm(q[0])
-    q = q / q_norm
+    q = q / max(q_norm, 1)
 
     for i in tqdm(range(DOCUMENT_COUNT)):
         cos.append(metric(q, matrix, i))
 
-    # top_k = np.argpartition(cos, -k)[-k:]
     top_k = np.argsort(cos)[-k:][::-1]
-    for i in top_k:
-        print("Title: {:<35} close: {:<20} url: {:<34}".format(dataset[int(i)]['title'], cos[int(i)], dataset[int(i)]['url']))
+    return [
+        Article(
+            title=dataset[int(i)]['title'],
+            close=cos[int(i)],
+            url=dataset[int(i)]['url']) for i in top_k
+    ]
 
 
-search("roman", similarity_metric_1)
+# search("roman", similarity_metric_1)
